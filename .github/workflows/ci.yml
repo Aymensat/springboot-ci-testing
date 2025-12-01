@@ -17,7 +17,6 @@ jobs:
           MYSQL_ROOT_PASSWORD: aymen
           MYSQL_DATABASE: course_management
         ports:
-          # map host 3307 -> container 3306 to avoid runner's preinstalled MySQL on 3306
           - 3307:3306
         options: >-
           --health-cmd="mysqladmin ping -h localhost -paymen"
@@ -36,23 +35,52 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Wait for MySQL to be ready on port 3307
+      - name: Wait for MySQL
         run: |
-          echo "Waiting for MySQL (host port 3307) to be ready..."
+          echo "Waiting for MySQL on port 3307..."
           for i in {1..30}; do
-            # -P 3307 (host port), -paymen (no space)
             if mysqladmin ping -h 127.0.0.1 -P 3307 -u root -paymen > /dev/null 2>&1; then
               echo "MySQL is ready!"
               break
             fi
-            echo "MySQL not ready yet... ($i)"
             sleep 2
           done
 
+      # 1. RUN TESTS
       - name: Run Maven Build & Tests
         env:
-          # Override datasource so Spring connects to the mapped host port 3307
           SPRING_DATASOURCE_URL: jdbc:mysql://localhost:3307/course_management
           SPRING_DATASOURCE_USERNAME: root
           SPRING_DATASOURCE_PASSWORD: aymen
         run: mvn clean verify -B
+
+      # 2. SECURITY REPORT (Logs EVERYTHING to a file, does NOT fail build)
+      - name: Generate Full Security Report
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          ignore-unfixed: true
+          format: 'table'
+          output: 'security-report.txt'   # Saves result to this file
+          severity: 'LOW,MEDIUM,HIGH,CRITICAL'
+          exit-code: '0'                  # 0 means "Don't fail the build yet"
+
+      # 3. SECURITY GATE (Fails build ONLY on Critical/High issues)
+      - name: Check Critical Vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          ignore-unfixed: true
+          format: 'table'                 # Prints to console so you see it immediately
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'                  # 1 means "FAIL the build"
+
+      # 4. UPLOAD REPORTS (Test results + Security Text File)
+      - name: Upload Test & Security Reports
+        if: always() # IMPORTANT: Run this even if tests or security check failed!
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-project-reports
+          path: |
+            target/surefire-reports/**
+            security-report.txt
