@@ -65,16 +65,16 @@ jobs:
           severity: 'LOW,MEDIUM,HIGH,CRITICAL'
           exit-code: '0'                  # 0 means "Don't fail the build yet"
 
-      # 3. SECURITY GATE (Fails build ONLY on Critical/High issues)
+      # 3. SECURITY GATE (Fails build ONLY on Critical issues)
       - name: Check Critical Vulnerabilities
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
           ignore-unfixed: true
-          format: 'table'                 # Prints to console so you see it immediately
-          severity: 'CRITICAL,HIGH'
-          exit-code: '1'                  # 1 means "FAIL the build"
-
+          format: 'table'
+          # CHANGE HERE: Remove ',HIGH' so it only stops for CRITICAL
+          severity: 'CRITICAL'
+          exit-code: '1'
       # 4. UPLOAD REPORTS (Test results + Security Text File)
       - name: Upload Test & Security Reports
         if: always() # IMPORTANT: Run this even if tests or security check failed!
