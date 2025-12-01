@@ -17,9 +17,10 @@ jobs:
           MYSQL_ROOT_PASSWORD: aymen
           MYSQL_DATABASE: course_management
         ports:
-          - 3306:3306
+          # map host 3307 -> container 3306 to avoid runner's preinstalled MySQL on 3306
+          - 3307:3306
         options: >-
-          --health-cmd="mysqladmin ping -h localhost -p aymen"
+          --health-cmd="mysqladmin ping -h localhost -paymen"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
@@ -35,20 +36,23 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Wait for MySQL to be ready
+      - name: Wait for MySQL to be ready on port 3307
         run: |
-          echo "Waiting for MySQL..."
+          echo "Waiting for MySQL (host port 3307) to be ready..."
           for i in {1..30}; do
-            if mysqladmin ping -h 127.0.0.1 -u root -paymen > /dev/null 2>&1; then
+            # -P 3307 (host port), -paymen (no space)
+            if mysqladmin ping -h 127.0.0.1 -P 3307 -u root -paymen > /dev/null 2>&1; then
               echo "MySQL is ready!"
               break
             fi
+            echo "MySQL not ready yet... ($i)"
             sleep 2
           done
 
       - name: Run Maven Build & Tests
         env:
-          SPRING_DATASOURCE_URL: jdbc:mysql://localhost:3306/course_management
+          # Override datasource so Spring connects to the mapped host port 3307
+          SPRING_DATASOURCE_URL: jdbc:mysql://localhost:3307/course_management
           SPRING_DATASOURCE_USERNAME: root
           SPRING_DATASOURCE_PASSWORD: aymen
         run: mvn clean verify -B
